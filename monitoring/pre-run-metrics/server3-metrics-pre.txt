@@ -1,0 +1,1 @@
+{"uptimeMillis":5993452,"startTimeMillis":1773719915410,"activeConnections":0,"queuePublishFailures":0,"messagesPerSecondApprox":0.0,"messagesEnqueued":0}

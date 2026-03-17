@@ -1,0 +1,1 @@
+{"uptimeMillis":1419045,"startTimeMillis":1773724292766,"messagesProcessed":0,"messagesPerSecondApprox":0.0}
