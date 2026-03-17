@@ -10,3 +10,10 @@ target/
 # OS
 .DS_Store
 Thumbs.db
+
+# Don’t push the load test client folder
+client/
+# Don’t push EC2 spreadsheet (and Office temp lock files)
+EC2 Instance IP.xlsx
+~$*.xlsx
+~$*.docx
