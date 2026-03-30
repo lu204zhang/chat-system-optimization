@@ -34,6 +34,12 @@ public class RabbitConfig {
     @Value("${chat.serverId:server-v2}")
     private String serverId;
 
+    @Value("${chat.circuitBreaker.failureThreshold:3}")
+    private int failureThreshold;
+
+    @Value("${chat.circuitBreaker.cooldownMillis:10000}")
+    private long cooldownMillis;
+
     @Bean
     public QueuePublisher queuePublisher(ObjectMapper objectMapper, ServerMetrics serverMetrics) throws IOException, TimeoutException {
         return new QueuePublisher(
@@ -45,7 +51,9 @@ public class RabbitConfig {
                 channelPoolSize,
                 objectMapper,
                 serverId,
-                serverMetrics
+                serverMetrics,
+                failureThreshold,
+                cooldownMillis
         );
     }
 }
