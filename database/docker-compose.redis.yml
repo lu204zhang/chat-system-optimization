@@ -1,0 +1,12 @@
+# Local Redis for consumer-v3 when chat.fanout.redis.enabled=true
+#
+#   docker compose -f docker-compose.redis.yml up -d
+#
+# Default in application.properties: spring.data.redis.host=localhost port=6379
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: chatflow-redis
+    ports:
+      - "6379:6379"

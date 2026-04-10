@@ -9,25 +9,46 @@ import java.util.concurrent.TimeoutException;
 
 public class ConsumerChannelManager {
 
-    private final Connection connection;
+    private final ConnectionFactory factory;
+    private volatile Connection connection;
 
-    public ConsumerChannelManager(String host, int port, String username, String password) throws IOException, TimeoutException {
-        ConnectionFactory factory = new ConnectionFactory();
-        factory.setHost(host);
-        factory.setPort(port);
-        factory.setUsername(username);
-        factory.setPassword(password);
-        this.connection = factory.newConnection();
+    public ConsumerChannelManager(String host, int port, String username, String password)
+            throws IOException, TimeoutException {
+        this.factory = new ConnectionFactory();
+        this.factory.setHost(host);
+        this.factory.setPort(port);
+        this.factory.setUsername(username);
+        this.factory.setPassword(password);
+        // Lazy-connect: do not block Spring startup if RabbitMQ is unavailable or credentials are wrong.
     }
 
     public Channel createChannel() throws IOException {
-        return connection.createChannel();
+        try {
+            return getOrCreateConnection().createChannel();
+        } catch (TimeoutException e) {
+            throw new IOException("RabbitMQ connection timeout", e);
+        }
     }
 
     public void close() throws IOException, TimeoutException {
-        if (connection.isOpen()) {
-            connection.close();
+        Connection c = this.connection;
+        if (c != null && c.isOpen()) {
+            c.close();
+        }
+    }
+
+    private Connection getOrCreateConnection() throws IOException, TimeoutException {
+        Connection c = this.connection;
+        if (c != null && c.isOpen()) {
+            return c;
+        }
+        synchronized (this) {
+            c = this.connection;
+            if (c != null && c.isOpen()) {
+                return c;
+            }
+            this.connection = factory.newConnection();
+            return this.connection;
         }
     }
 }
-

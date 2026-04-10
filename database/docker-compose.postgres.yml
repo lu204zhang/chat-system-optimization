@@ -1,0 +1,26 @@
+# Local PostgreSQL for consumer-v3 (matches application.properties defaults).
+#
+# From this directory (database/):
+#   docker compose -f docker-compose.postgres.yml up -d
+#
+# JDBC URL in consumer: jdbc:postgresql://localhost:5432/chatflow
+# If Windows/WSL port 5432 is already taken, change to "5433:5432" and set
+# spring.datasource.url=jdbc:postgresql://localhost:5433/chatflow
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: chatflow-postgres
+    environment:
+      POSTGRES_DB: chatflow
+      POSTGRES_USER: chatuser
+      POSTGRES_PASSWORD: chatpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - chatflow_pg_data:/var/lib/postgresql/data
+      # Runs once on first empty data volume (alphabetical order).
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+volumes:
+  chatflow_pg_data:

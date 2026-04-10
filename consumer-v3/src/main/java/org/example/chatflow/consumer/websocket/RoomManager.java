@@ -66,16 +66,20 @@ public class RoomManager {
         int         failed    = 0;
 
         for (WebSocketSession session : sessions) {
-            if (!session.isOpen()) {
-                continue;
-            }
-            attempted++;
-            try {
-                session.sendMessage(msg);
-            } catch (IOException e) {
-                failed++;
-                System.err.println("[RoomManager] Send failed for session "
-                        + session.getId() + " in room " + roomId + ": " + e.getMessage());
+            // JSR-356 / Tomcat: concurrent sendMessage on the same session yields
+            // TEXT_PARTIAL_WRITING. Redis fanout invokes broadcast from a pool thread.
+            synchronized (session) {
+                if (!session.isOpen()) {
+                    continue;
+                }
+                attempted++;
+                try {
+                    session.sendMessage(msg);
+                } catch (IOException e) {
+                    failed++;
+                    System.err.println("[RoomManager] Send failed for session "
+                            + session.getId() + " in room " + roomId + ": " + e.getMessage());
+                }
             }
         }
 

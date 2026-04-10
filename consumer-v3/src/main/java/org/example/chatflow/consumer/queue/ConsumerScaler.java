@@ -3,7 +3,9 @@ package org.example.chatflow.consumer.queue;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.chatflow.consumer.database.BatchWriteBuffer;
-import org.example.chatflow.consumer.websocket.RoomManager;
+import org.example.chatflow.consumer.dedup.MessageDeduplicator;
+import org.example.chatflow.consumer.fanout.RoomFanoutPublisher;
+import org.example.chatflow.consumer.monitoring.FanoutMetrics;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -43,8 +45,13 @@ public class ConsumerScaler implements DisposableBean {
 
     private final ConsumerChannelManager channelManager;
     private final ObjectMapper           objectMapper;
-    private final RoomManager            roomManager;
     private final BatchWriteBuffer       writeBuffer;
+    private final MessageDeduplicator    deduplicator;
+    private final RoomFanoutPublisher    fanoutPublisher;
+    private final FanoutMetrics          metrics;
+
+    @Value("${chat.consumer.scaler.enabled:false}")
+    private boolean enabled;
 
     @Value("${chat.rabbitmq.host:localhost}")
     private String mqHost;
@@ -93,12 +100,16 @@ public class ConsumerScaler implements DisposableBean {
 
     public ConsumerScaler(ConsumerChannelManager channelManager,
                           ObjectMapper objectMapper,
-                          RoomManager roomManager,
-                          BatchWriteBuffer writeBuffer) {
+                          BatchWriteBuffer writeBuffer,
+                          MessageDeduplicator deduplicator,
+                          RoomFanoutPublisher fanoutPublisher,
+                          FanoutMetrics metrics) {
         this.channelManager = channelManager;
         this.objectMapper   = objectMapper;
-        this.roomManager    = roomManager;
         this.writeBuffer    = writeBuffer;
+        this.deduplicator   = deduplicator;
+        this.fanoutPublisher = fanoutPublisher;
+        this.metrics        = metrics;
     }
 
     /**
@@ -113,6 +124,9 @@ public class ConsumerScaler implements DisposableBean {
 
     @Scheduled(fixedDelayString = "${chat.consumer.scaleIntervalMs:5000}")
     public void scale() {
+        if (!enabled) {
+            return;
+        }
         long depth = fetchTotalQueueDepth();
         if (depth < 0) {
             return; // Management API unavailable — leave current worker count unchanged
@@ -136,7 +150,7 @@ public class ConsumerScaler implements DisposableBean {
     private synchronized void addWorker() {
         ConsumerWorker worker = new ConsumerWorker(
                 channelManager, new ArrayList<>(ALL_QUEUES), objectMapper,
-                roomManager, writeBuffer, prefetch);
+                writeBuffer, deduplicator, fanoutPublisher, metrics, prefetch);
         activeWorkers.add(worker);
         scalingExecutor.submit(worker);
         workerCount.incrementAndGet();

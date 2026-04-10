@@ -2,6 +2,7 @@ package org.example.chatflow.consumer.monitoring;
 
 import org.example.chatflow.consumer.queue.ConsumerScaler;
 import org.example.chatflow.consumer.websocket.RoomManager;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -12,12 +13,16 @@ import java.util.Map;
 public class ConsumerMetricsController {
 
     private final RoomManager    roomManager;
-    private final ConsumerScaler scaler;
+    private final ObjectProvider<ConsumerScaler> scalerProvider;
+    private final FanoutMetrics fanoutMetrics;
     private final long startTimeMillis = System.currentTimeMillis();
 
-    public ConsumerMetricsController(RoomManager roomManager, ConsumerScaler scaler) {
-        this.roomManager = roomManager;
-        this.scaler      = scaler;
+    public ConsumerMetricsController(RoomManager roomManager,
+                                    ObjectProvider<ConsumerScaler> scalerProvider,
+                                    FanoutMetrics fanoutMetrics) {
+        this.roomManager     = roomManager;
+        this.scalerProvider  = scalerProvider;
+        this.fanoutMetrics   = fanoutMetrics;
     }
 
     @GetMapping("/metrics")
@@ -33,7 +38,9 @@ public class ConsumerMetricsController {
         out.put("uptimeMillis",           uptimeMillis);
         out.put("messagesProcessed",      processed);
         out.put("messagesPerSecondApprox", messagesPerSecond);
-        out.put("activeWorkerThreads",    scaler.getWorkerCount());   // Fix 4: expose dynamic thread count
+        ConsumerScaler scaler = scalerProvider.getIfAvailable();
+        out.put("activeWorkerThreads", scaler != null ? scaler.getWorkerCount() : null);
+        out.putAll(fanoutMetrics.snapshot());
         return out;
     }
 }

@@ -1,5 +1,6 @@
 package org.example.chatflow.consumer.database;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +29,11 @@ import java.time.Instant;
 public class StatsAggregator {
 
     private final MessageRepository repository;
+
+    /** When false, scheduled refresh is skipped (no JDBC); bean still exists for MetricsApiController. */
+    @Value("${chat.db.stats.enabled:false}")
+    private boolean statsRefreshEnabled;
+
     private volatile Instant lastRefreshedAt = null;
 
     public StatsAggregator(MessageRepository repository) {
@@ -36,6 +42,9 @@ public class StatsAggregator {
 
     @Scheduled(fixedDelayString = "${chat.db.statsRefreshIntervalMs:30000}")
     public void refreshStats() {
+        if (!statsRefreshEnabled) {
+            return;
+        }
         try {
             long start = System.currentTimeMillis();
             repository.refreshMaterializedViews();
