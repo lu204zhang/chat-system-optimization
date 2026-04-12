@@ -1,5 +1,6 @@
 package org.example.chatflow.consumer.api;
 
+import org.example.chatflow.consumer.cache.CacheService;
 import org.example.chatflow.consumer.database.MessageRepository;
 import org.example.chatflow.consumer.database.StatsAggregator;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,14 +43,17 @@ public class MetricsApiController {
     private static final long RESPONSE_CACHE_TTL_MS = 30_000;
 
     private final MessageRepository repo;
+    private final CacheService      cacheService;
     private final StatsAggregator   statsAggregator;
 
     // Simple single-entry response cache (no external library required)
     private final AtomicReference<Map<String, Object>> cachedResponse = new AtomicReference<>();
     private final AtomicLong cacheExpiryMs = new AtomicLong(0);
 
-    public MetricsApiController(MessageRepository repo, StatsAggregator statsAggregator) {
+    public MetricsApiController(MessageRepository repo, CacheService cacheService,
+                                StatsAggregator statsAggregator) {
         this.repo            = repo;
+        this.cacheService    = cacheService;
         this.statsAggregator = statsAggregator;
     }
 
@@ -110,7 +114,7 @@ public class MetricsApiController {
         response.put("generatedAt",        Instant.now().toString());
         response.put("viewsLastRefreshed", statsAggregator.getLastRefreshedAt() != null
                 ? statsAggregator.getLastRefreshedAt().toString() : "pending");
-        response.put("totalMessagesInDB",  repo.getTotalMessageCount());
+        response.put("totalMessagesInDB",  cacheService.getCachedTotalMessageCount());
         response.put("queryWindowStart",   start.toString());
         response.put("queryWindowEnd",     end.toString());
         response.put("queriedRoomId",      roomId);
@@ -126,10 +130,10 @@ public class MetricsApiController {
         q1.put("roomId",         roomId);
         q1.put("startTime",      start.toString());
         q1.put("endTime",        end.toString());
-        long q1Count = repo.countRoomMessages(roomId, start, end);
+        long q1Count = cacheService.getCachedRoomMessageCount(roomId, start, end);
         q1.put("messageCount",   q1Count);
         List<Map<String, Object>> q1Sample =
-                repo.getRoomMessagesInTimeRange(roomId, start, end, sampleSize);
+                cacheService.getCachedRoomMessages(roomId, start, end, sampleSize);
         q1.put("sampleMessages", q1Sample);
         core.put("Q1_roomMessagesInTimeRange", q1);
 
@@ -141,10 +145,10 @@ public class MetricsApiController {
         q2.put("startTime",      start.toString());
         q2.put("endTime",        end.toString());
         if (resolvedUserId != null) {
-            long q2Count = repo.countUserMessages(resolvedUserId, start, end);
+            long q2Count = cacheService.getCachedUserMessageCount(resolvedUserId, start, end);
             q2.put("messageCount", q2Count);
             List<Map<String, Object>> q2Sample =
-                    repo.getUserMessageHistory(resolvedUserId, start, end, sampleSize);
+                    cacheService.getCachedUserHistory(resolvedUserId, start, end, sampleSize);
             q2.put("sampleMessages", q2Sample);
         } else {
             q2.put("messageCount", 0);
@@ -158,7 +162,7 @@ public class MetricsApiController {
         q3.put("performanceTarget", "< 500 ms");
         q3.put("startTime",      start.toString());
         q3.put("endTime",        end.toString());
-        q3.put("uniqueUserCount", repo.countActiveUsersInWindow(start, end));
+        q3.put("uniqueUserCount", cacheService.getCachedActiveUsersCount(start, end));
         core.put("Q3_activeUsersInWindow", q3);
 
         // Q4 – Rooms user participated in
@@ -167,7 +171,7 @@ public class MetricsApiController {
         q4.put("performanceTarget", "< 50 ms");
         q4.put("userId",         resolvedUserId);
         if (resolvedUserId != null) {
-            q4.put("rooms", repo.getRoomsForUser(resolvedUserId));
+            q4.put("rooms", cacheService.getCachedRoomsForUser(resolvedUserId));
         } else {
             q4.put("rooms", List.of());
         }
@@ -189,23 +193,26 @@ public class MetricsApiController {
         Map<String, Object> a2 = new LinkedHashMap<>();
         a2.put("description", "Top " + topN + " most active users");
         a2.put("topN",        topN);
-        a2.put("users",       repo.getTopActiveUsers(topN));
+        a2.put("users",       cacheService.getCachedTopUsers(topN));
         analytics.put("A2_topActiveUsers", a2);
 
         // A3 – Top N active rooms
         Map<String, Object> a3 = new LinkedHashMap<>();
         a3.put("description", "Top " + topN + " most active rooms");
         a3.put("topN",        topN);
-        a3.put("rooms",       repo.getTopActiveRooms(topN));
+        a3.put("rooms",       cacheService.getCachedTopRooms(topN));
         analytics.put("A3_topActiveRooms", a3);
 
         // A4 – User participation patterns
         Map<String, Object> a4 = new LinkedHashMap<>();
         a4.put("description", "User participation patterns (rooms visited distribution)");
-        a4.put("distribution", repo.getUserParticipationPatterns());
+        a4.put("distribution", cacheService.getCachedParticipationPatterns());
         analytics.put("A4_userParticipationPatterns", a4);
 
         response.put("analyticsQueries", analytics);
+
+        // ---- Optimization 2.1/2.2: cache statistics ----
+        response.put("cacheStats", cacheService.getCacheStats());
 
         // ---- populate cache for default requests ----
         if (isDefaultRequest) {

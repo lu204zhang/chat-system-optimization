@@ -5,6 +5,7 @@ import org.example.chatflow.consumer.database.BatchWriteBuffer;
 import org.example.chatflow.consumer.database.DatabaseWriter;
 import org.example.chatflow.consumer.database.DbCircuitBreaker;
 import org.example.chatflow.consumer.database.MessageRepository;
+import org.example.chatflow.consumer.cache.CacheService;
 import org.example.chatflow.consumer.dedup.MessageDeduplicator;
 import org.example.chatflow.consumer.fanout.RoomFanoutPublisher;
 import org.example.chatflow.consumer.monitoring.FanoutMetrics;
@@ -148,13 +149,14 @@ public class ConsumerConfig implements DisposableBean {
                                             MessageDeduplicator deduplicator,
                                             RoomFanoutPublisher fanoutPublisher,
                                             FanoutMetrics metrics,
+                                            CacheService cacheService,
                                             ConsumerScaler scaler) {
         consumerExecutor = Executors.newCachedThreadPool();
 
         for (int i = 0; i < minWorkers; i++) {
             ConsumerWorker worker = new ConsumerWorker(
                     manager, new ArrayList<>(ALL_QUEUES), objectMapper,
-                    writeBuffer, deduplicator, fanoutPublisher, metrics, prefetch);
+                    writeBuffer, deduplicator, fanoutPublisher, metrics, cacheService, prefetch);
             initialWorkers.add(worker);
             consumerExecutor.submit(worker);
         }
