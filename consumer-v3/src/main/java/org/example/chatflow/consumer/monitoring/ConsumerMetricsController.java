@@ -1,5 +1,6 @@
 package org.example.chatflow.consumer.monitoring;
 
+import org.example.chatflow.consumer.cache.CacheService;
 import org.example.chatflow.consumer.queue.ConsumerScaler;
 import org.example.chatflow.consumer.websocket.RoomManager;
 import org.springframework.beans.factory.ObjectProvider;
@@ -15,14 +16,17 @@ public class ConsumerMetricsController {
     private final RoomManager    roomManager;
     private final ObjectProvider<ConsumerScaler> scalerProvider;
     private final FanoutMetrics fanoutMetrics;
+    private final CacheService  cacheService;
     private final long startTimeMillis = System.currentTimeMillis();
 
     public ConsumerMetricsController(RoomManager roomManager,
                                     ObjectProvider<ConsumerScaler> scalerProvider,
-                                    FanoutMetrics fanoutMetrics) {
+                                    FanoutMetrics fanoutMetrics,
+                                    CacheService cacheService) {
         this.roomManager     = roomManager;
         this.scalerProvider  = scalerProvider;
         this.fanoutMetrics   = fanoutMetrics;
+        this.cacheService    = cacheService;
     }
 
     @GetMapping("/metrics")
@@ -41,6 +45,7 @@ public class ConsumerMetricsController {
         ConsumerScaler scaler = scalerProvider.getIfAvailable();
         out.put("activeWorkerThreads", scaler != null ? scaler.getWorkerCount() : null);
         out.putAll(fanoutMetrics.snapshot());
+        out.put("cache", cacheService.getCacheStats());
         return out;
     }
 }

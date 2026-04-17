@@ -2,6 +2,7 @@ package org.example.chatflow.consumer.queue;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.example.chatflow.consumer.cache.CacheService;
 import org.example.chatflow.consumer.database.BatchWriteBuffer;
 import org.example.chatflow.consumer.dedup.MessageDeduplicator;
 import org.example.chatflow.consumer.fanout.RoomFanoutPublisher;
@@ -49,6 +50,7 @@ public class ConsumerScaler implements DisposableBean {
     private final MessageDeduplicator    deduplicator;
     private final RoomFanoutPublisher    fanoutPublisher;
     private final FanoutMetrics          metrics;
+    private final CacheService           cacheService;
 
     @Value("${chat.consumer.scaler.enabled:false}")
     private boolean enabled;
@@ -103,13 +105,15 @@ public class ConsumerScaler implements DisposableBean {
                           BatchWriteBuffer writeBuffer,
                           MessageDeduplicator deduplicator,
                           RoomFanoutPublisher fanoutPublisher,
-                          FanoutMetrics metrics) {
+                          FanoutMetrics metrics,
+                          CacheService cacheService) {
         this.channelManager = channelManager;
         this.objectMapper   = objectMapper;
         this.writeBuffer    = writeBuffer;
         this.deduplicator   = deduplicator;
         this.fanoutPublisher = fanoutPublisher;
         this.metrics        = metrics;
+        this.cacheService   = cacheService;
     }
 
     /**
@@ -150,7 +154,7 @@ public class ConsumerScaler implements DisposableBean {
     private synchronized void addWorker() {
         ConsumerWorker worker = new ConsumerWorker(
                 channelManager, new ArrayList<>(ALL_QUEUES), objectMapper,
-                writeBuffer, deduplicator, fanoutPublisher, metrics, prefetch);
+                writeBuffer, deduplicator, fanoutPublisher, metrics, cacheService, prefetch);
         activeWorkers.add(worker);
         scalingExecutor.submit(worker);
         workerCount.incrementAndGet();

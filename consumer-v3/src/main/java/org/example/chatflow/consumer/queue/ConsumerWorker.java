@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.DeliverCallback;
+import org.example.chatflow.consumer.cache.CacheService;
 import org.example.chatflow.consumer.dedup.MessageDeduplicator;
 import org.example.chatflow.consumer.database.BatchWriteBuffer;
 import org.example.chatflow.consumer.database.ChatMessage;
@@ -25,6 +26,7 @@ public class ConsumerWorker implements Runnable {
     private final MessageDeduplicator deduplicator;
     private final RoomFanoutPublisher fanoutPublisher;
     private final FanoutMetrics metrics;
+    private final CacheService cacheService;
     private final int prefetch;
     private volatile boolean running = true;
 
@@ -35,6 +37,7 @@ public class ConsumerWorker implements Runnable {
             MessageDeduplicator deduplicator,
             RoomFanoutPublisher fanoutPublisher,
             FanoutMetrics metrics,
+            CacheService cacheService,
             int prefetch) {
         this.channelManager = channelManager;
         this.queues = queues;
@@ -43,6 +46,7 @@ public class ConsumerWorker implements Runnable {
         this.deduplicator = deduplicator;
         this.fanoutPublisher = fanoutPublisher;
         this.metrics = metrics;
+        this.cacheService = cacheService;
         this.prefetch = prefetch;
     }
 
@@ -125,7 +129,10 @@ public class ConsumerWorker implements Runnable {
                         messageType, serverId, clientIp, createdAt);
                 writeBuffer.offer(chatMessage);
 
-                // 2. Fanout to local WebSocket clients (direct) or via Redis pub/sub.
+                // 2. Invalidate caches affected by this new message (event-driven, Optimization 2.3)
+                cacheService.onNewMessage(chatMessage);
+
+                // 3. Fanout to local WebSocket clients (direct) or via Redis pub/sub.
                 fanoutPublisher.publish(roomId, body);
 
                 channel.basicAck(deliveryTag, false);
